@@ -1,0 +1,1 @@
+cmd_/home/ubuntu/op-tee/yzc/modules/arm_lsm/Module.symvers :=  scripts/mod/modpost       -o /home/ubuntu/op-tee/yzc/modules/arm_lsm/Module.symvers -T /home/ubuntu/op-tee/yzc/modules/arm_lsm/modules.order -i Module.symvers -e 

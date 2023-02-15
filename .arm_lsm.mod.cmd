@@ -1,0 +1,1 @@
+cmd_/home/ubuntu/op-tee/yzc/modules/arm_lsm/arm_lsm.mod := printf '%s\n'   arm_lsm.o | awk '!x[$$0]++ { print("/home/ubuntu/op-tee/yzc/modules/arm_lsm/"$$0) }' > /home/ubuntu/op-tee/yzc/modules/arm_lsm/arm_lsm.mod
