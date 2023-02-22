@@ -72,7 +72,39 @@ int my_mmap_file(struct file *file, unsigned long reqprot, unsigned long prot, u
 	return 0;
 }
 
-int check_syscall(void)
+int check_MMU(void *pvoid)
+{
+	int kernel_pagetable_base, user_pagetable_base, sctlr_el1=0;
+
+	asm volatile("mrs %0, TTBR1_EL1" 
+		: "=r" (kernel_pagetable_base)
+	);
+	printk("kernel_pagetable_base: 0x%x\n", kernel_pagetable_base);
+
+	asm volatile("mrs %0, SCTLR_EL1" //读sctlr系统寄存器
+		: "=r" (sctlr_el1)
+	);
+	printk("r_sctlr_el1: 0x%x\n", sctlr_el1);
+
+	return 0;  
+}
+
+int check_PageRW(void *pvoid)
+{
+	return 0;
+}
+
+int check_idt(void *pvoid)
+{
+	int vbar_el1 = 0;
+	asm volatile("mrs %0, VBAR_EL1" 
+		: "=r" (vbar_el1)
+	);
+	printk("r_vbar_el1: 0x%x\n", vbar_el1);
+	return 0;
+}
+
+int check_syscall(void *pvoid)
 {
 	unsigned long *sys_call_table = 0;
 	sys_call_table = (unsigned long *)kallsyms_lookup_name("sys_call_table");
@@ -81,37 +113,19 @@ int check_syscall(void)
 	return 0;  
 }
 
-int check_mmu(void)
-{
-	int kernel_pagetable_base, user_pagetable_base, sctlr_el1=0;
-
-	asm volatile("mrs %0, TTBR1_EL1" 
-		: "=r" (kernel_pagetable_base)
-	);
-	printk("kernel_pagetable_base: 0x%x\n", kernel_pagetable_base);
-	// asm volatile("mrs %0, TTBR0_EL0" 
-	// 	: "=r" (user_pagetable_base)
-	// );
-	// printk("user_pagetable_base: 0x%x\n", user_pagetable_base);
-
-	asm volatile("mrs %0, SCTLR_EL1" //读sctlr系统寄存器
-		: "=r" (sctlr_el1)
-	);
-	printk("sctlr_el1: 0x%x\n", sctlr_el1);
-
-	return 0;  
-}
-
-int check_idt(void)
+int check_SELinux(void *pvoid)
 {
 	return 0;
 }
 
 int my_task_alloc(struct task_struct *task,unsigned long clone_flags)
 {
-	//check_syscall();
-	check_mmu();
-	//check_idt();
+	void * pvoid;
+	//check_MMU(pvoid);
+	//check_PageRW(pvoid);
+	check_idt(pvoid);
+	check_syscall(pvoid);
+	//check_SELinux(pvoid);
 
     return 0;
 }
