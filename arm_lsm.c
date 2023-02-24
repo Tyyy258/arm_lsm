@@ -74,39 +74,48 @@ int my_mmap_file(struct file *file, unsigned long reqprot, unsigned long prot, u
 
 int check_MMU(void *pvoid)
 {
-	int kernel_pagetable_base, user_pagetable_base, sctlr_el1=0;
+	int sctlr_el1, st_mmu=0;
 
-	asm volatile("mrs %0, TTBR1_EL1" 
-		: "=r" (kernel_pagetable_base)
-	);
-	printk("kernel_pagetable_base: 0x%x\n", kernel_pagetable_base);
-
-	asm volatile("mrs %0, SCTLR_EL1" //读sctlr系统寄存器
+	asm volatile("mrs %0, SCTLR_EL1 \n\t" //读sctlr系统寄存器
+				//"asr %0, %0, #31 \n\t"  //sctlr系统寄存器逻辑右移31位
+				//"bic %0,%0,#0x7fffffff  \n\t"  //sctlr寄存器后31位置0
+				//"orr %0,%0,#0x80000000  \n\t" //sctlr寄存器第0位置1
 		: "=r" (sctlr_el1)
 	);
-	printk("r_sctlr_el1: 0x%x\n", sctlr_el1);
+	st_mmu = (unsigned int)sctlr_el1 >> 31;
+	printk("MMU status: %x\n", st_mmu);
 
 	return 0;  
 }
 
 int check_PageRW(void *pvoid)
 {
+	int kernel_pagetable_base, user_pagetable_base=0;
+
+	asm volatile("mrs %0, TTBR1_EL1" 
+		: "=r" (kernel_pagetable_base)
+	);
+	printk("kernel_pagetable_base: 0x%x\n", kernel_pagetable_base);
+
 	return 0;
 }
 
 int check_idt(void *pvoid)
 {
 	int vbar_el1 = 0;
+
 	asm volatile("mrs %0, VBAR_EL1" 
 		: "=r" (vbar_el1)
 	);
 	printk("r_vbar_el1: 0x%x\n", vbar_el1);
+
 	return 0;
 }
 
 int check_syscall(void *pvoid)
 {
 	unsigned long *sys_call_table = 0;
+
 	sys_call_table = (unsigned long *)kallsyms_lookup_name("sys_call_table");
 	printk("sys_call_table_addr:%lx \n"); 
 
@@ -121,25 +130,25 @@ int check_SELinux(void *pvoid)
 int my_task_alloc(struct task_struct *task,unsigned long clone_flags)
 {
 	void * pvoid;
-	//check_MMU(pvoid);
+	check_MMU(pvoid);
 	//check_PageRW(pvoid);
-	check_idt(pvoid);
-	check_syscall(pvoid);
+	//check_idt(pvoid);
+	//check_syscall(pvoid);
 	//check_SELinux(pvoid);
 
     return 0;
 }
 
 
-struct security_hook_list hooks[]; //目的是将这两个security_hook_list结构体中的list head指针插入到security_hook_heads结构体中对应的位置
+struct security_hook_list hooks[]; //----security_hook_list是哈希节点
 
 void my_init_security_hook_list(void)
 {
 	union security_list_options my_hook;
-	hooks[0].head = &my_hook_head->task_alloc;  //传递内核默认的task_alloc指针，my_hook_head是导出符号表里的地址
-	my_hook.task_alloc = my_task_alloc;   //
-	hooks[0].hook = my_hook;  //把我的task_alloc函数指针传给联合体，再传给securoty_hook_list实例，此实例既包含我的task_alloc函数指针（hook成员），
-							  //也包含将被注册的head list结构体
+	hooks[0].head = &my_hook_head->task_alloc;  //----hooks[0].head要指向链表头节点，作为尾插法参数，也就是security_hook_heads->task_alloc,也就是&my_hook_head->task_alloc
+	my_hook.task_alloc = my_task_alloc;   //----替换security_list_options中的函数指针
+	hooks[0].hook = my_hook;  //---将security_list_options注册到security_hook_list中
+							  
 
 	hooks[1].head = &my_hook_head->mmap_file;
 	my_hook.mmap_file = my_mmap_file;
@@ -159,8 +168,8 @@ static void my_add_hooks(struct security_hook_list *hooks, int count, char *lsm)
 	int i;
 	for(i = 0; i < count; i++){
 		hooks[i].lsm = lsm;
-		hlist_add_tail_rcu(&hooks[i].list, hooks[i].head);    //利用list_add_tail_rcu，将security_hook_list插入到security_hook_heads实例对应成员链表中，
-															//该成员由security_hook_list.head成员指定，在security_hook_list初始化时已经初始化
+		hlist_add_tail_rcu(&hooks[i].list, hooks[i].head);    //---hlist_add_tail是把一个哈希链表的节点插入到哈希链表的头节点的前边，也就是尾插法。已经设置hooks[i].head是头节点指针，&hooks[i].list是新list_head节点。将list_head节点插入哈希表后，可以通过list_head指针访问security_hook_list，调用钩子函数。
+															
 		printk("***************add hooks[%d]*************\n", i);
 	}
 }
@@ -181,10 +190,10 @@ static int __init my_init(void)
 	my_hook_head = (struct security_hook_heads *)kallsyms_lookup_name("security_hook_heads");
 	//printk("***************kallsyms_lookup_name success*************\n");
 
-	my_init_security_hook_list();
+	my_init_security_hook_list();   
 	//printk("***************my_init_security_hook_list success*************\n");
 
-	//cr0 = clear_and_return_cr0();
+	//cr0 = clear_and_return_cr0();  //---节点security_hook_list hooks[0]中已经有my_钩子函数，且节点尾指针指向
 	my_add_hooks(hooks, 4,"arm_lsm");
 	//printk("***************my_add_hooks success*************\n");
 	//setback_cr0(cr0);
